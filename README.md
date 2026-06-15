@@ -2,7 +2,7 @@
 
 # 🎬 premiumize-web
 
-**Stream your Premiumize library instantly through Plex, Radarr, and Sonarr**
+**Stream your Premiumize library instantly through Plex**
 
 premiumize-web is a self-hosted bridge that connects [Premiumize.me](https://premiumize.me) to your media stack. It surfaces your cached torrents as a virtual filesystem that Plex can stream directly — no downloading to disk, no waiting, just instant playback.
 
