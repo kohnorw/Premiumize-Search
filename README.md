@@ -1,10 +1,10 @@
 <div align="center">
 
-# 🎬 premiumize-web
+# 🎬 Premiumize-Seb
 
 **Stream your Premiumize library instantly. Search, grab, and auto-import into Radarr and Sonarr.**
 
-premiumize-web is a self-hosted bridge between [Premiumize.me](https://premiumize.me) and your media stack. It mounts your Premiumize cloud library as a virtual filesystem, fakes a qBittorrent download client so Radarr and Sonarr can import files instantly, and keeps everything in sync automatically.
+Premiumize-Seb is a self-hosted bridge between [Premiumize.me](https://premiumize.me) and your media stack. It mounts your Premiumize cloud library as a virtual filesystem, fakes a qBittorrent download client so Radarr and Sonarr can import files instantly, and keeps everything in sync automatically.
 
 </div>
 
