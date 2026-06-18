@@ -119,7 +119,7 @@ After Plex has finished its first scan of everything you added, go to **Settings
 
 ---
 
-## 🔘 The Import button (important)
+## The Import button (important)
 
 > **Settings → Plex → "✅ Import Complete — Switch to CDN"**
 
@@ -152,7 +152,7 @@ The button shows **✅ Import Complete** once it's been pressed, and stays that 
 
 ---
 
-## 🖥️ The Web UI
+## The Web UI
 
 ### Search
 
@@ -195,7 +195,7 @@ Progress streams live, showing each title as it's processed.
 
 ---
 
-## ⚙️ Environment Variables
+## Environment Variables
 
 Set in `.env`. Most can also be changed live in the UI.
 
@@ -250,7 +250,7 @@ Set in `.env`. Most can also be changed live in the UI.
 
 ---
 
-## 🗂️ How it works
+## How it works
 
 ### The virtual filesystem
 
