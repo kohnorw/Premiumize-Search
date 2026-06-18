@@ -1,39 +1,45 @@
 <div align="center">
 
-# 🎬 Premiumize-Search
+# 🎬 premiumize-web
 
-**Stream your Premiumize library instantly. Search, grab, and auto-import into Radarr and Sonarr.**
+**Stream your Premiumize library instantly. Search, grab, and auto-import into Radarr and Sonarr — without ever downloading a file to disk.**
 
-Premiumize-Search is a self-hosted bridge between [Premiumize.me](https://premiumize.me) and your media stack. It mounts your Premiumize cloud library as a virtual filesystem, fakes a qBittorrent download client so Radarr and Sonarr can import files instantly, and keeps everything in sync automatically.
+premiumize-web is a self-hosted bridge between [Premiumize.me](https://premiumize.me) and your media stack. It mounts your Premiumize cloud library as a virtual filesystem, pretends to be a qBittorrent download client so Radarr and Sonarr import instantly, and keeps Plex/Jellyfin/Emby in sync — all while keeping your Premiumize bandwidth (Fair-Use points) as low as possible.
 
 </div>
 
 ---
 
-## ✨ What it does
+## ✨ Features
 
-- **Searches** your Premiumize cache and Prowlarr indexers from a single web UI
-- **Grabs** cached torrents instantly — no downloading to disk
-- **Mounts** your Premiumize library as a FUSE virtual filesystem that Plex, Jellyfin, or Emby can stream from directly
-- **Auto-imports** grabbed content into Radarr or Sonarr immediately after you click Add
-- **Syncs** your entire Premiumize library into Radarr/Sonarr in bulk (Full Sync, Partial Sync, or Reconcile)
-- **Routes** content to the right Arr instance automatically — 4K content goes to your 4K instance, HD to your HD instance
+- **Stream, don't download.** Your Premiumize library is mounted as a FUSE virtual filesystem. Plex/Jellyfin/Emby read directly from it; bytes are pulled from the Premiumize CDN on demand and nothing is stored to disk.
+- **Search everywhere.** Query your Premiumize cache and your Prowlarr indexers from one web UI. Cached results appear instantly; uncached ones are queued on Premiumize.
+- **Instant auto-import.** Click *Add* and the content is registered with the matching Radarr/Sonarr instance and imported immediately — no waiting, no manual reconcile.
+- **Stub-first scanning + a one-time Import button.** New content is first served as a tiny stub so Plex can scan your whole library at **zero CDN cost**. One click then flips everything to real streaming — permanently. (See [The Import button](#-the-import-button-important).)
+- **4K-aware routing.** 4K/UHD content is automatically routed to your 4K Radarr/Sonarr instances and HD content to your HD instances, into separate `movies4k` / `series4k` mount folders.
+- **Bulk library sync.** Full Sync or Partial Sync your entire Premiumize library into Radarr/Sonarr, with a live progress stream.
+- **Bandwidth-aware streaming.** An analysis-aware prefetch gate keeps Plex's metadata scans cheap (a few MB per file instead of hundreds), a disk cache means you never fetch the same bytes twice, and chunk size / read-ahead are tunable live.
+- **Video-files-only mode.** Optionally hide NFOs, samples, extras, and non-video files so libraries stay clean.
+- **TMDB metadata.** Optional TMDB key generates `.nfo` metadata for accurate titles, posters, and episode data. Supports both the v3 API key and the v4 Read Access Token.
+- **Self-healing FUSE mount.** Clean unmount on shutdown, automatic cleanup of stale mounts on restart, and a watchdog that detects and recovers a wedged mount without a full restart.
+- **Self-contained backup & restore.** Export everything — your cached transfers *and* your config (including the Premiumize key) — in one file.
 
 ---
 
 ## 📋 Requirements
 
 - **Docker** with Compose
-- **Premiumize.me** account — get your API key from [premiumize.me/account](https://premiumize.me/account)
-- **Prowlarr** *(optional but recommended)* — for searching torrent indexers
-- **Radarr and/or Sonarr** *(optional)* — for library management and automatic import
+- **Premiumize.me** account and API key — from [premiumize.me/account](https://premiumize.me/account)
+- **Prowlarr** *(optional, recommended)* — for searching indexers
+- **Radarr and/or Sonarr** *(optional)* — for library management and auto-import
 - **Plex / Jellyfin / Emby** *(optional)* — for streaming
+- A host kernel with FUSE support (`/dev/fuse`). The container runs privileged for the in-container mount.
 
 ---
 
-## 🚀 Quick Start
+## 🚀 Getting Started
 
-### 1. Extract the files
+### 1. Extract
 
 ```bash
 mkdir -p /docker/premiumize-web
@@ -41,19 +47,18 @@ cd /docker/premiumize-web
 tar -xzf premiumize-web.tar.gz --strip-components=1
 ```
 
-### 2. Configure your environment
+### 2. Configure
 
-```bash
-cp .env.example .env
-nano .env
-```
-
-At minimum you need your Premiumize API key:
+Create a `.env` next to `docker-compose.yml`:
 
 ```env
 PREMIUMIZE_API_KEY=your_api_key_here
-TORZNAB_APIKEY=changeme   # change this — Prowlarr uses it to authenticate
+TORZNAB_APIKEY=change-me        # Prowlarr uses this to authenticate
+PROWLARR_URL=http://192.168.1.10:9696
+PROWLARR_API_KEY=your_prowlarr_key
 ```
+
+Only `PREMIUMIZE_API_KEY` is strictly required to start; everything else can also be set later in the web UI under **Settings**.
 
 ### 3. Start
 
@@ -61,320 +66,245 @@ TORZNAB_APIKEY=changeme   # change this — Prowlarr uses it to authenticate
 docker compose up -d --build
 ```
 
-Open **http://your-server-ip:5000**
+Open **http://your-server-ip:5000**.
 
----
+### 4. Connect your media stack
 
-## ⚙️ Environment Variables
+<details>
+<summary><b>Prowlarr</b> — add premiumize-web as a Torznab indexer</summary>
 
-Set these in your `.env` file. Most can also be changed live in the web UI under Settings.
-
-### Core
-
-| Variable | Default | Description |
-|---|---|---|
-| `PREMIUMIZE_API_KEY` | *(required)* | Your Premiumize API key |
-| `TORZNAB_APIKEY` | `changeme` | API key Prowlarr uses to authenticate with premiumize-web |
-| `ENABLE_FUSE` | `true` | Set to `false` to disable the virtual filesystem |
-| `DOWNLOADS_ROOT` | `/docker/premiumize-web/downloads` | Where fake import stubs are written |
-
-### Prowlarr
-
-| Variable | Default | Description |
-|---|---|---|
-| `PROWLARR_URL` | — | e.g. `http://192.168.1.10:9696` |
-| `PROWLARR_API_KEY` | — | Found in Prowlarr → Settings → General |
-
-### Plex Auto-Scan
-
-| Variable | Default | Description |
-|---|---|---|
-| `PLEX_URL` | — | e.g. `http://192.168.1.10:32400` |
-| `PLEX_TOKEN` | — | Your Plex token (see below) |
-| `PLEX_MOVIES_SECTION` | `1` | Plex library section ID for Movies |
-| `PLEX_TV_SECTION` | `2` | Plex library section ID for TV Shows |
-| `PLEX_SCAN_DEBOUNCE` | `30` | Seconds to wait before triggering a scan — batches bulk imports |
-
-**Finding your Plex token:** Play any item → ··· → Get Info → View XML → look for `X-Plex-Token=` in the URL.
-
-### FUSE Streaming
-
-| Variable | Default | Description |
-|---|---|---|
-| `FUSE_READAHEAD_MB` | `32` | Chunk size in MB. Larger = fewer CDN round trips |
-| `FUSE_CACHE_BLOCKS` | `64` | RAM blocks to keep. `64 × 32MB = 2GB` in memory |
-| `FUSE_READ_AHEAD` | `512MB` | How far ahead of playback to prefetch |
-| `FUSE_CACHE_DIR` | `/docker/premiumize-web/cache` | Disk cache location |
-| `FUSE_VIDEO_ONLY` | `true` | Only show video files in the mount |
-| `FUSE_READ_TIMEOUT` | `30` | CDN timeout in seconds |
-
-**Recommended streaming settings:**
-
-| Content | Chunk Size | RAM Buffer |
-|---|---|---|
-| 1080p | 16MB | 1GB |
-| 4K HDR | 32MB | 2GB |
-| 4K with slow CDN | 32MB | 4GB+ |
-
----
-
-## 🔌 Connecting your media stack
-
-### Prowlarr
-
-Add premiumize-web as a Torznab indexer so Radarr and Sonarr can search through it:
-
-1. Prowlarr → Indexers → Add Indexer → Torznab
-2. Fill in:
+Indexers → Add → Torznab:
 
 | Field | Value |
 |---|---|
-| Name | `Premiumize` |
 | URL | `http://your-server-ip:5000/torznab` |
-| API Key | Your `TORZNAB_APIKEY` |
+| API Key | your `TORZNAB_APIKEY` |
 | Categories | Movies (2000), TV (5000) |
+</details>
 
-### Radarr
+<details>
+<summary><b>Radarr / Sonarr</b> — add premiumize-web as a qBittorrent download client</summary>
 
-**Download Client** → Add → qBittorrent:
+Download Client → Add → qBittorrent:
 
 | Field | Value |
 |---|---|
 | Host | `your-server-ip` |
 | Port | `5000` |
 | URL Base | `/qbt` |
-| Category | `radarr` |
+| Category | `radarr` (or `sonarr`) |
 | Username / Password | *(leave blank)* |
 
-**Remote Path Mapping** → Add:
+Add a **Remote Path Mapping** where Remote = Local = `/docker/premiumize-web/downloads/radarr` (or `/sonarr`).
+</details>
 
-| Field | Value |
+<details>
+<summary><b>Plex / Jellyfin / Emby</b> — point libraries at the mount</summary>
+
+| Library | Path |
 |---|---|
-| Host | `your-server-ip` |
-| Remote Path | `/docker/premiumize-web/downloads/radarr` |
-| Local Path | `/docker/premiumize-web/downloads/radarr` |
+| Movies | `/docker/premiumize-web/mnt/movies` |
+| TV Shows | `/docker/premiumize-web/mnt/series` |
+| Movies 4K *(optional)* | `/docker/premiumize-web/mnt/movies4k` |
+| TV 4K *(optional)* | `/docker/premiumize-web/mnt/series4k` |
+</details>
 
-### Sonarr
+### 5. Add or sync your content
 
-Same as Radarr, but set:
-- Category: `sonarr`
-- Remote Path: `/docker/premiumize-web/downloads/sonarr`
-- Local Path: `/docker/premiumize-web/downloads/sonarr`
+Either search-and-Add individual items in the **Search** tab, or use the **Sync** tab to bulk-import your existing Premiumize library into Radarr/Sonarr.
 
-### Plex / Jellyfin / Emby
+### 6. Press the Import button — once
 
-Add two libraries pointing at the virtual filesystem:
-
-- **Movies** → `/docker/premiumize-web/mnt/movies`
-- **TV Shows** → `/docker/premiumize-web/mnt/series`
-
-New content appears automatically in Plex within ~30 seconds when auto-scan is configured.
+After Plex has finished its first scan of everything you added, go to **Settings → Plex** and click **✅ Import Complete — Switch to CDN**. This is a one-time step that switches the whole library from cheap scanning stubs to real streaming. It's important enough to have its own section below.
 
 ---
 
-## 🖥️ Web UI
+## 🔘 The Import button (important)
 
-Open **http://your-server-ip:5000** to access the web interface.
+> **Settings → Plex → "✅ Import Complete — Switch to CDN"**
 
-### Search Tab
+This button is the single most important concept to understand, because it's what keeps your Premiumize bandwidth low during setup.
 
-Search your Premiumize cache and connected Prowlarr indexers. Each result shows:
+### Why it exists
 
-- ✅ **Green cloud** — already cached on Premiumize, will appear instantly
-- ❌ **Red cloud** — not cached, will be added to the Premiumize download queue
+When Plex adds a library, it **scans every file** — reading each one to detect duration, codec, and resolution. If Plex read the *real* video for every title straight from the Premiumize CDN, that initial scan of a large library would burn a huge amount of Fair-Use bandwidth before you've watched anything.
 
-Click **Add** to grab a result. If you have Radarr/Sonarr instances configured in the Sync tab, the content is also automatically added to the right Arr instance and imported immediately — no manual reconcile needed.
+To avoid that, premiumize-web serves each new file as a **tiny stub** (a few hundred KB, correct resolution) instead of the real video. Plex happily scans the stub — at essentially **zero CDN cost** — and imports the item. Your whole library can be scanned for free.
 
-**Search syntax:**
-- `Breaking Bad S03` — season search
-- `Oppenheimer 2023` — movie search
-- `The Bear Season 2` — alternate season format
+### What the button does
 
-### Library Tab
+Once Plex has finished that initial scan/import, you press the button **once**. It sets a permanent, one-way latch:
 
-Browse everything currently available in your FUSE mount. Filter by name to find specific content.
+- Every file — everything already in the library **and anything you add later** — now serves the **real video bytes** from the Premiumize CDN.
+- New content added after this point is a real file immediately. **No stub, no second press.**
+- The setting persists across restarts.
 
-### Sync Tab
+### How to use it
 
-Bulk-import your Premiumize library into Radarr and/or Sonarr.
+1. Add or sync all your content (Search tab and/or Sync tab).
+2. Let Plex finish scanning — the library populates from stubs, fast and free.
+3. Click **Import Complete — Switch to CDN**.
+4. Done. From now on, playback streams real files, and any new additions are real files automatically.
 
-#### Configuring Instances
+The button shows **✅ Import Complete** once it's been pressed, and stays that way. The only thing that changes after the switch is that the stub→real size change makes Plex re-scan each file once — but that re-scan is kept cheap by the prefetch gate (it reads only the header, a few MB, not the whole movie).
 
-Add one row per Arr instance. Each instance has:
+> **In short:** stubs make the big initial scan free; the button flips you into real-streaming mode forever. Press it once, after your first import settles.
 
-- **Type** — Radarr or Sonarr
-- **Quality** — HD, 4K, or **Any**
-  - `Any` — this instance receives both HD and 4K content
-  - `HD` — only receives non-4K content
-  - `4K` — only receives 2160p/UHD content
-- **Name** — a label shown in the UI
-- **URL** — e.g. `http://192.168.1.10:7878`
-- **API Key** — found in your Arr instance under Settings → General
+---
 
-Example setup for a full 4K-aware stack:
+## 🖥️ The Web UI
 
-| Type | Quality | Name | URL |
-|---|---|---|---|
-| Radarr | HD | Radarr | http://192.168.1.10:7878 |
-| Radarr | 4K | Radarr 4K | http://192.168.1.10:7879 |
-| Sonarr | HD | Sonarr | http://192.168.1.10:8989 |
-| Sonarr | 4K | Sonarr 4K | http://192.168.1.10:8990 |
+### Search
 
-If you only have one Radarr and one Sonarr, set both to **Any** and they'll receive everything.
+Search your Premiumize cache and Prowlarr indexers. A green cloud means already cached (instant); a red cloud means it will be queued on Premiumize. Click **Add** to grab — if you've configured Arr instances in the Sync tab, it's also auto-imported into the right one.
 
-#### Sync Modes
+Search syntax examples: `Oppenheimer 2023`, `Breaking Bad S03`, `The Bear Season 2`.
 
-**Full Sync**
-Clears all existing episode/movie files in the Arr library, then imports everything found in the selected FUSE folder. For Sonarr, this does a per-episode match — only episodes present in the FUSE mount get fake files created. All series are set to monitored so Sonarr searches for any missing episodes.
+### Library
 
-Use this when starting fresh or after adding a large batch of content to Premiumize.
+Browse everything currently in your FUSE mount; filter by name.
 
-**Partial Sync**
-Keeps your existing library intact. For Radarr, only adds movies that aren't already in the library. For Sonarr, only creates fake files for series already in your Sonarr library — it will not add new series. Use this for incremental updates.
+### Sync
 
-**Reconcile**
-Drives off your existing Arr library rather than the FUSE folder. For each movie or episode already in Radarr/Sonarr:
-- If it's in the FUSE mount → create a fake file so Arr imports it
-- If it's not in the FUSE mount → set it to monitored so Arr searches for it
+Bulk-import your Premiumize library into Radarr/Sonarr.
 
-Use this to fix up a library where some items show as missing when the files actually exist on Premiumize.
+**Configure instances** — one row each, with Type (Radarr/Sonarr), Quality (HD / 4K / **Any**), Name, URL, and API key. With separate HD and 4K instances, content routes by resolution automatically; with one of each set to **Any**, everything goes there.
 
-#### FUSE Folder
+**Choose a folder** to sync from: `movies`, `movies4k`, `series`, or `series4k`.
 
-Choose which subfolder of the FUSE mount to scan:
+**Pick a mode:**
 
-| Folder | Contents |
+| Mode | What it does |
 |---|---|
-| `movies` | Standard HD movies |
-| `movies4k` | 4K/UHD movies |
-| `series` | Standard HD TV |
-| `tv4k` | 4K/UHD TV |
+| **Full Sync** | Wipes existing stubs from the Arr root, sets all library items to monitored, then writes a fresh stub for every item in the mount and triggers a rescan. Best for a clean reset. |
+| **Partial Sync** | Only adds stubs for mount items that don't already have one in the Arr root. Existing stubs are untouched. Fast — good for keeping up with new additions. |
+
+Progress streams live, showing each title as it's processed.
+
+### Settings
+
+| Section | Purpose |
+|---|---|
+| **API Key** | Your Premiumize API key — required for everything. |
+| **Prowlarr** | URL + key for search. |
+| **Mount Configuration** | Live-tune FUSE streaming (chunk size, RAM buffer, read-ahead, video-only, timeouts) — applies immediately, no restart. |
+| **Plex** | Plex URL/token for auto-scan, plus the **Import Complete** button. |
+| **TMDB** | Optional metadata key (v3 key or v4 read token). Use **Test** to verify. |
+| **💾 Debrid Backup & Restore** | Export/restore your cached transfers **and** config (incl. Premiumize key) in one file. |
+| **Clear Downloads** | Removes the small import stubs from the downloads folder. Never touches real media. |
 
 ---
 
-## 🔄 How auto-import works
+## ⚙️ Environment Variables
 
-When you click **Add** in the search UI:
+Set in `.env`. Most can also be changed live in the UI.
 
-1. The torrent is added to your Premiumize account (or marked as cached if it already is)
-2. It appears immediately in the FUSE virtual filesystem
-3. In the background, premiumize-web:
-   - Detects whether it's a movie or series (from the title pattern)
-   - Detects whether it's 4K or HD (from the resolution token in the name)
-   - Picks the matching Arr instance based on type + quality
-   - Adds the movie/series to that Arr instance if it isn't already there
-   - Creates a small stub file in the downloads folder
-   - Sends a `RescanMovie` or `RescanSeries` command to Arr
-   - Arr imports the stub, marking the content as "Downloaded"
-4. Plex auto-scan fires and the content appears in your library
+### Core
 
-The whole process typically completes within 5–10 seconds for cached content.
-
----
-
-## 🗂️ How the virtual filesystem works
-
-```
-/docker/premiumize-web/mnt/
-  movies/
-    The.Dark.Knight.2008.2160p.BluRay/
-      The.Dark.Knight.2008.2160p.BluRay.mkv
-  series/
-    Breaking.Bad.S03E07.1080p/
-      Breaking.Bad.S03E07.1080p.mkv
-```
-
-Files are **never downloaded to disk** — they stream from the Premiumize CDN in real time. The local cache (`FUSE_CACHE_DIR`) stores blocks you've already fetched so seeking backward is instant and you never re-download the same data twice.
-
-**Movies vs series** is detected automatically from the torrent name. Anything matching `S01E01`, `Season 1`, `1x01`, etc. goes into `series/`. Everything else goes into `movies/`.
-
----
-
-## 🎭 How Arr importing works (the fake file trick)
-
-Radarr and Sonarr don't know about cloud storage — they expect files on disk. premiumize-web works around this by acting as a qBittorrent download client and creating small stub `.mkv` files (a few hundred KB each) in the downloads folder. These stubs:
-
-- Are real video files at the correct resolution (1080p stubs have actual 1920×1080 pixel dimensions, 4K stubs are 3840×2160)
-- Pass MediaInfo quality detection so Radarr/Sonarr report the right quality tier
-- Are created with open permissions so Radarr/Sonarr can move them
-
-When Arr imports the stub, it moves it to your movies/series folder and marks the item as "Downloaded". The actual streaming happens via the FUSE mount — Plex reads from there, not from the imported stub.
-
-For **season packs**, premiumize-web creates one stub per episode (e.g. `Show.S01E01.WEBRip-1080p.mkv`, `Show.S01E02.WEBRip-1080p.mkv`, etc.) so Sonarr can import all episodes individually.
-
----
-
-## ⚙️ Settings Tab
+| Variable | Default | Description |
+|---|---|---|
+| `PREMIUMIZE_API_KEY` | *(required)* | Your Premiumize API key |
+| `TORZNAB_APIKEY` | `changeme` | Key Prowlarr uses to authenticate |
+| `ENABLE_FUSE` | `true` | Set `false` to disable the mount |
+| `DOWNLOADS_ROOT` | `/docker/premiumize-web/downloads` | Where import stubs are written |
+| `PORT` | `5000` | Web UI / API port |
 
 ### Prowlarr
 
-Set your Prowlarr URL and API key. Used for searching when you type in the Search tab.
+| Variable | Description |
+|---|---|
+| `PROWLARR_URL` | e.g. `http://192.168.1.10:9696` |
+| `PROWLARR_API_KEY` | Prowlarr → Settings → General |
 
-### API Key
+### Plex auto-scan
 
-Your Premiumize API key. Required for everything.
+| Variable | Default | Description |
+|---|---|---|
+| `PLEX_URL` | — | e.g. `http://192.168.1.10:32400` |
+| `PLEX_TOKEN` | — | Your Plex token |
+| `PLEX_MOVIES_SECTION` | `1` | Movies library section ID |
+| `PLEX_TV_SECTION` | `2` | TV library section ID |
+| `PLEX_SCAN_DEBOUNCE` | `30` | Seconds to batch bulk imports before scanning |
 
-### Mount Configuration
+*Find your token:* play any item → ··· → Get Info → View XML → `X-Plex-Token=` in the URL.
 
-Live-tune all FUSE streaming parameters without restarting. Changes apply immediately.
+### TMDB *(optional)*
 
-### Backup & Restore
+| Variable | Description |
+|---|---|
+| `TMDB_API_KEY` | v3 API key (32-char) **or** v4 Read Access Token (JWT). Both are accepted. |
 
-Export your transfer database as JSON. Useful before updates or migrations. The restore function re-adds all transfers that are still cached on Premiumize — anything that has expired is skipped.
+### FUSE streaming
 
-### Clear Downloads
+| Variable | Default | Description |
+|---|---|---|
+| `FUSE_READAHEAD_MB` | `32` | Chunk size (MB). **Drop to `4` if movies stall or scans use too much bandwidth.** |
+| `FUSE_CACHE_BLOCKS` | `64` | RAM blocks kept in memory (64 × chunk size). |
+| `FUSE_READ_AHEAD` | `500MB` | How far ahead of playback to prefetch. |
+| `FUSE_PREFETCH` | `true` | Master prefetch on/off. |
+| `FUSE_PREFETCH_SEQ_THRESHOLD` | `2` | Consecutive blocks of sequential reads before prefetch engages. Keeps scans cheap; `0` disables the gate. |
+| `FUSE_VIDEO_ONLY` | `true` | Show only video files — hides NFOs, samples, and extras. |
+| `FUSE_READ_TIMEOUT` | `30` | CDN read timeout (seconds). |
+| `FUSE_CACHE_DIR` | `/docker/premiumize-web/cache` | Disk cache location. |
+| `FUSE_MOUNTPOINT` | `/docker/premiumize-web/mnt` | Mount location. |
 
-Removes all stub files from `/docker/premiumize-web/downloads`. Safe to run at any time — these are only the small import stubs, not your actual media. Useful after a messy sync or if you want to force Arr to re-import everything.
+---
+
+## 🗂️ How it works
+
+### The virtual filesystem
+
+```
+/docker/premiumize-web/mnt/
+  movies/   The.Dark.Knight.2008.2160p.BluRay/  The.Dark.Knight.2008.2160p.BluRay.mkv
+  series/   Breaking.Bad.S03E07.1080p/          Breaking.Bad.S03E07.1080p.mkv
+```
+
+Files are never downloaded. They stream from the Premiumize CDN in real time, and the disk cache stores blocks you've already fetched so seeking back is instant and the same bytes are never pulled twice. Movie vs. series is detected from the name (`S01E01`, `Season 1`, `1x01` → series); 4K vs. HD from the resolution token.
+
+### Stubs and the Arr import trick
+
+Radarr and Sonarr expect files on disk. premiumize-web acts as a qBittorrent client and writes small `.mkv` stubs (correct pixel dimensions so MediaInfo reports the right quality tier) into the downloads folder. Arr imports the stub and marks the item "Downloaded"; actual playback happens through the mount. Season packs get one stub per episode so every episode imports.
+
+The same stubs are what the mount serves for scanning **until you press the Import button** — then the mount serves real CDN bytes (see above).
+
+### Bandwidth control
+
+The biggest cost isn't playback — it's Plex *touching* files during scans and analysis. premiumize-web minimizes this with: stub-first scanning (free initial scan), an analysis-aware prefetch gate (a metadata probe reads a few MB, not the whole file), a disk cache (no re-fetching), and targeted Plex scans instead of full sweeps. For best results, also disable Plex's whole-file tasks (preview thumbnails, loudness analysis, intro/credit detection) — those decode entire files and no server-side change can stop them.
+
+### Self-healing mount
+
+On shutdown the mount is cleanly unmounted; on restart any stale "Transport endpoint is not connected" mount is cleared before remounting; and a watchdog probes the live mount every 15s, forcing a remount if it ever goes unresponsive — all with time-bounded operations so recovery itself can never hang. Keep `restart: unless-stopped` in compose so the process itself also comes back after a crash.
 
 ---
 
 ## 🛠️ Troubleshooting
 
-### No results when searching in Radarr/Sonarr
-- Confirm Prowlarr is reachable and the indexer is added correctly
-- Use the host's LAN IP inside Docker (e.g. `192.168.1.x`), not `localhost`
-- Check that your Premiumize API key is set in Settings
+**Movies stall or scanning uses too much bandwidth** — Set Chunk Size to `4MB` in Mount Configuration, confirm the prefetch gate is on (default), and disable Plex's video preview thumbnails, loudness analysis, and intro/credit detection. A movie that hangs at the very start is the header read; one that hangs partway is usually a Plex whole-file analysis task.
 
-### Content shows as "Downloading" in Arr instead of "Downloaded"
-- The fake file was created but hasn't been imported yet — wait 60 seconds for Arr's next poll
-- Or trigger a manual rescan in Arr → Movies/Series → Edit → Rescan
+**Content shows "Downloading" not "Downloaded" in Arr** — Wait for Arr's next poll (~60s) or trigger a manual rescan.
 
-### "Permission denied" importing fake files
-- Run `chmod -R a+rw /docker/premiumize-web/downloads` on the host
-- This happens when the container and Arr run as different users
+**"Permission denied" importing stubs** — `chmod -R a+rw /docker/premiumize-web/downloads` (container and Arr run as different users).
 
-### Season pack only imports one episode
-- Make sure you're on the latest version — older versions created one stub for the whole pack
-- Current versions create one stub per episode so all episodes import correctly
+**Sonarr sync freezes partway with no logs** — Update to the current build; the sync now emits a heartbeat per item (the status line shows the in-flight title) and skips per-item TMDB lookups when Video Files Only is on.
 
-### Sonarr series not getting set to monitored after Full Sync
-- This is fixed in the current version — Full Sync now re-monitors all series after the reconcile pass
+**TMDB test fails with a correct key** — The current build accepts both the v3 key and the v4 Read Access Token. If it still fails, check the container can reach `api.themoviedb.org`.
 
-### FUSE mount appears empty
-- Check `docker logs premiumize-web | grep -i fuse`
-- Confirm your Premiumize API key is valid and your account has cached content
-- Make sure the container has `SYS_ADMIN` capability and `/dev/fuse` device access (see `docker-compose.yml`)
+**Export Config / backup** — The backup is now self-contained (transfers + config + Premiumize key). Treat the file as a secret. Restoring an older backup overwrites changed settings (uploaded values win).
 
-### Buffering or stuttering in Plex
-- Increase Chunk Size to `32MB` and Buffer Memory to `2GB` in Mount Configuration
-- For 4K specifically, increase Read Timeout to `30s`
-- Check `docker logs premiumize-web | grep "Block fetch"` for CDN errors
+**FUSE mount appears empty** — `docker logs premiumize-web | grep -i fuse`; confirm a valid Premiumize key and `/dev/fuse` + `SYS_ADMIN` access.
 
-### "Episode file already imported" errors in Sonarr
-- This is handled automatically — the reconcile skips episodes that already have files
-- If it persists, run Clear Downloads in Settings and then a fresh Reconcile
+**"Connection refused :5000" in Sonarr** — The app was down (restart/redeploy/crash). Confirm it's listening (`curl http://host:5000/`) and that compose has `restart: unless-stopped`. Sonarr retries on the next RSS pass.
 
 ---
 
-## 🗄️ Backup and Restore
-
-From the web UI → Settings → Backup & Restore, or via API:
+## 🗄️ Backup & Restore via API
 
 ```bash
-# Download backup
+# Self-contained backup (transfers + config + PM key)
 curl http://your-server-ip:5000/api/backup -o backup.json
 
-# Restore
+# Restore (accepts both new and legacy backups)
 curl -X POST http://your-server-ip:5000/api/restore -F "file=@backup.json"
 ```
 
@@ -392,5 +322,5 @@ rm -rf /docker/premiumize-web
 ---
 
 <div align="center">
-<sub>Built for people who want their media stack to just work.</sub>
+<sub>Built for people who want their media stack to just work — without burning bandwidth to do it.</sub>
 </div>
