@@ -98,6 +98,8 @@ Download Client → Add → qBittorrent:
 Add a **Remote Path Mapping** where Remote = Local = `/docker/premiumize-web/downloads/radarr` (or `/sonarr`).
 </details>
 
+> **First time?** See [Adding the indexer & download client to Radarr/Sonarr](#-adding-the-indexer--download-client-to-radarrsonarr) for full step-by-step instructions, including adding the indexer directly to the Arrs without Prowlarr.
+
 <details>
 <summary><b>Plex / Jellyfin / Emby</b> — point libraries at the mount</summary>
 
@@ -149,6 +151,94 @@ Once Plex has finished that initial scan/import, you press the button **once**. 
 The button shows **✅ Import Complete** once it's been pressed, and stays that way. The only thing that changes after the switch is that the stub→real size change makes Plex re-scan each file once — but that re-scan is kept cheap by the prefetch gate (it reads only the header, a few MB, not the whole movie).
 
 > **In short:** stubs make the big initial scan free; the button flips you into real-streaming mode forever. Press it once, after your first import settles.
+
+---
+
+## 🔗 Adding the indexer & download client to Radarr/Sonarr
+
+This is the detailed version of step 4. There are two pieces: an **indexer** (so the Arrs can search premiumize-web for releases) and a **download client** (the fake qBittorrent, so the Arrs can "grab" and import them). You need both.
+
+> Throughout, use your server's **LAN IP** (e.g. `192.168.1.50`), not `localhost` or `127.0.0.1` — Radarr/Sonarr usually run in their own containers and can't reach premiumize-web on loopback.
+
+### Part 1 — Add the indexer
+
+premiumize-web exposes a standard **Torznab** indexer at `/torznab`. You can add it either through Prowlarr (recommended if you already run it) or directly into each Arr.
+
+#### Option A — via Prowlarr (recommended)
+
+1. Prowlarr → **Indexers** → **Add Indexer** → search for and choose **Generic Torznab**.
+2. Fill in:
+
+   | Field | Value |
+   |---|---|
+   | Name | `Premiumize` |
+   | URL | `http://your-server-ip:5000/torznab` |
+   | API Key | your `TORZNAB_APIKEY` |
+   | Categories | Movies (2000), TV (5000) |
+
+3. **Test**, then **Save**.
+4. Prowlarr will push the indexer to Radarr/Sonarr automatically (make sure those are added under Prowlarr → Settings → Apps).
+
+#### Option B — directly in Radarr/Sonarr (no Prowlarr)
+
+1. In Radarr (or Sonarr) → **Settings → Indexers** → **+** → choose **Torznab** (the "Custom" Torznab option).
+2. Fill in:
+
+   | Field | Value |
+   |---|---|
+   | Name | `Premiumize` |
+   | URL | `http://your-server-ip:5000/torznab` |
+   | API Path | `/api` *(default — resolves to `/torznab/api`)* |
+   | API Key | your `TORZNAB_APIKEY` |
+   | Categories | **Radarr:** Movies `2000` (and `2045` for UHD) · **Sonarr:** TV `5000` (and `5045` for UHD) |
+
+3. Leave the rest at defaults. **Test** (it should report OK), then **Save**.
+
+The indexer supports plain text search, movie search, and TV search with season/episode — so Radarr/Sonarr's automatic and interactive searches both work. Results that are already cached on Premiumize are flagged so they grab instantly.
+
+### Part 2 — Configure the qBittorrent download client
+
+premiumize-web pretends to be qBittorrent at `/qbt`. When an Arr "grabs" a release, it hands the magnet to this client, which writes the import stub and (optionally) auto-imports.
+
+1. In Radarr (or Sonarr) → **Settings → Download Clients** → **+** → choose **qBittorrent**.
+2. Fill in:
+
+   | Field | Value | Notes |
+   |---|---|---|
+   | Name | `Premiumize` | anything |
+   | Enable | ✅ on | |
+   | Host | `your-server-ip` | LAN IP, **not** localhost |
+   | Port | `5000` | same port as the web UI |
+   | URL Base | `/qbt` | **required** — this is how the mock is reached |
+   | Username | *(blank)* | no auth |
+   | Password | *(blank)* | no auth |
+   | Category | `radarr` *(Radarr)* / `sonarr` *(Sonarr)* | becomes the download subfolder |
+   | Use SSL | ❌ off | |
+
+3. **Test** — it should succeed (the client reports a qBittorrent version and accepts the empty login). Then **Save**.
+
+> The **Category** you enter here is used as the subfolder under the downloads root: a category of `radarr` means stubs land in `/docker/premiumize-web/downloads/radarr`. Whatever you type must match the Remote Path Mapping below.
+
+### Part 3 — Add a Remote Path Mapping
+
+The download client tells the Arr the stub lives at `/docker/premiumize-web/downloads/<category>`. The Arr must be able to read that exact path, so add a mapping (even when the paths are identical — this is what makes import work reliably).
+
+1. In Radarr/Sonarr → **Settings → Download Clients** → scroll to **Remote Path Mappings** → **+**.
+2. Fill in:
+
+   | Field | Value |
+   |---|---|
+   | Host | `your-server-ip` *(must exactly match the download client's Host)* |
+   | Remote Path | `/docker/premiumize-web/downloads/radarr` *(or `/sonarr`)* |
+   | Local Path | the same path **as the Arr sees it** |
+
+3. **Save**.
+
+If Radarr/Sonarr run in containers, make sure `/docker/premiumize-web/downloads` is mounted into them so the Local Path is actually reachable. When the Arr and premiumize-web share the same host bind, Remote Path and Local Path are identical.
+
+### Verify
+
+Search for a cached title in the Arr (interactive search), grab it, and within a few seconds it should show as **Downloaded** (or import from the queue). If it sits at "Downloading," wait one poll cycle (~60 s) or trigger a manual rescan. If the download client **Test** fails with *connection refused*, premiumize-web isn't reachable on `:5000` from the Arr — check the IP/port and that the container is running.
 
 ---
 
