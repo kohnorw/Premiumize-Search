@@ -164,7 +164,7 @@ This is the detailed version of step 4. There are two pieces: an **indexer** (so
 
 premiumize-web exposes a standard **Torznab** indexer at `/torznab`. You can add it either through Prowlarr (recommended if you already run it) or directly into each Arr.
 
-#### Option A — via Prowlarr (recommended)
+#### Option A — via Prowlarr 
 
 1. Prowlarr → **Indexers** → **Add Indexer** → search for and choose **Generic Torznab**.
 2. Fill in:
@@ -179,7 +179,7 @@ premiumize-web exposes a standard **Torznab** indexer at `/torznab`. You can add
 3. **Test**, then **Save**.
 4. Prowlarr will push the indexer to Radarr/Sonarr automatically (make sure those are added under Prowlarr → Settings → Apps).
 
-#### Option B — directly in Radarr/Sonarr (no Prowlarr)
+#### Option B — directly in Radarr/Sonarr (no Prowlarr) (recommended)
 
 1. In Radarr (or Sonarr) → **Settings → Indexers** → **+** → choose **Torznab** (the "Custom" Torznab option).
 2. Fill in:
